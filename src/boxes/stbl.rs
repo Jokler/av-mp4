@@ -1,8 +1,8 @@
 use crate::*;
 
 use super::{
-    co64::ChunkLargeOffsetBox, stco::ChunkOffsetBox, stsc::SampleToChunkBox,
-    codec::stsd::SampleDescriptionBox, stss::SyncSampleBox, stsz::SampleSizeBox, stts::TimeToSampleBox,
+    co64::ChunkLargeOffsetBox, codec::stsd::SampleDescriptionBox, stco::ChunkOffsetBox,
+    stsc::SampleToChunkBox, stss::SyncSampleBox, stsz::SampleSizeBox, stts::TimeToSampleBox,
 };
 
 use std::io::Write;

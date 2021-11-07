@@ -1,32 +1,38 @@
 use byteorder::{BigEndian, ByteOrder};
-use four_cc::FourCC;
 
-use bytes::{BufMut, BytesMut};
+use crate::*;
 
 use crate::Mp4BoxError;
-use crate::{FullBoxHeader, Mp4Box};
+
+use std::mem::size_of;
 
 pub struct MovieFragmentHeaderBox {
+    full_box: FullBox,
     pub sequence_number: u32,
 }
 
-impl Mp4Box for MovieFragmentHeaderBox {
-    const NAME: FourCC = FourCC(*b"mfhd");
+impl MovieFragmentHeaderBox {
+    const SIZE: u64 = size_of::<u32>() as u64; // sequence_number
 
-    fn get_full_box_header(&self) -> Option<FullBoxHeader> {
-        Some(FullBoxHeader::new(0, 0))
+    pub fn new(sequence_number: u32) -> Self {
+        Self {
+            full_box: FullBox::new(*b"mfhd", 0, 0),
+            sequence_number,
+        }
     }
 
-    fn content_size(&self) -> u64 {
-        4
-    }
+    pub fn write(self, writer: &mut dyn Write) -> Result<(), Mp4BoxError> {
+        self.full_box.write(writer, self.total_size())?;
 
-    fn write_box_contents(&self, writer: &mut BytesMut) -> Result<(), Mp4BoxError> {
-        let mut contents = [0u8; 4];
+        let mut contents = [0u8; Self::SIZE as usize];
         BigEndian::write_u32(&mut contents, self.sequence_number);
 
-        writer.put_slice(&contents);
+        writer.write_all(&contents)?;
 
         Ok(())
+    }
+
+    pub fn total_size(&self) -> u64 {
+        self.full_box.size(Self::SIZE)
     }
 }

@@ -120,18 +120,18 @@ impl AvcDecoderConfigurationRecord {
             self.profile_compatibility,
             self.level_indication,
             0b1111_1100 | 3,
-            0b1110_0000 | 1,
+            0b1110_0000 | self.sequence_parameter_sets.len() as u8,
         ];
 
         writer.write_all(&header)?;
-        writer.write_u16::<BigEndian>(self.sequence_parameter_sets.len() as u16)?;
         for sps in &self.sequence_parameter_sets {
+            writer.write_u16::<BigEndian>(sps.0.len() as u16)?;
             writer.write_all(&sps.0)?;
         }
 
-        writer.write_u8(1)?;
-        writer.write_u16::<BigEndian>(self.picture_parameter_sets.len() as u16)?;
+        writer.write_u8(self.picture_parameter_sets.len() as u8)?;
         for pps in &self.picture_parameter_sets {
+            writer.write_u16::<BigEndian>(pps.0.len() as u16)?;
             writer.write_all(&pps.0)?;
         }
 

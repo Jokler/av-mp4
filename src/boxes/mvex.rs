@@ -7,15 +7,15 @@ use std::io::Write;
 pub struct MovieExtendsBox {
     boks: Boks,
     mehd: MovieExtendsHeaderBox,
-    trex: TrackExtendsBox,
+    trexs: Vec<TrackExtendsBox>,
 }
 
 impl MovieExtendsBox {
-    pub fn new(mehd: MovieExtendsHeaderBox, trex: TrackExtendsBox) -> Self {
+    pub fn new(mehd: MovieExtendsHeaderBox, trexs: Vec<TrackExtendsBox>) -> Self {
         MovieExtendsBox {
             boks: Boks::new(*b"mvex"),
             mehd,
-            trex,
+            trexs,
         }
     }
 
@@ -32,7 +32,9 @@ impl MovieExtendsBox {
         self.boks.write(writer, self.total_size())?;
 
         self.mehd.write(writer)?;
-        self.trex.write(writer)?;
+        for trex in self.trexs {
+            trex.write(writer)?;
+        }
 
         Ok(())
     }
@@ -42,6 +44,6 @@ impl MovieExtendsBox {
     }
 
     fn size(&self) -> u64 {
-        self.mehd.total_size() + self.trex.total_size()
+        self.mehd.total_size() + self.trexs.iter().map(|t| t.total_size()).sum::<u64>()
     }
 }

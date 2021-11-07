@@ -8,7 +8,7 @@ pub struct SoundMediaHeaderBox {
 }
 
 impl SoundMediaHeaderBox {
-    pub fn new(_timescale: Vec<u32>) -> Self {
+    pub fn new() -> Self {
         SoundMediaHeaderBox {
             full_box: FullBox::new(*b"smhd", 0, 0),
         }

@@ -2,7 +2,7 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
 use crate::*;
 
-use super::{avc1, vpxx, mp4v};
+use super::{avc1, mp4a, vpxx};
 
 use std::io::Write;
 use std::mem::size_of;
@@ -10,7 +10,7 @@ use std::mem::size_of;
 pub enum SampleEntry {
     Avc(avc1::AvcSampleEntryBox),
     Vp9(vpxx::Vp9SampleEntryBox),
-    Mpeg4(mp4v::Mpeg4VideoSampleEntryBox),
+    Mp4a(mp4a::Mpeg4AudioSampleEntryBox),
 }
 
 impl SampleEntry {
@@ -18,7 +18,7 @@ impl SampleEntry {
         match self {
             SampleEntry::Avc(avc1) => avc1.total_size(),
             SampleEntry::Vp9(vp9) => vp9.total_size(),
-            SampleEntry::Mpeg4(mp4v) => mp4v.total_size(),
+            SampleEntry::Mp4a(mp4a) => mp4a.total_size(),
         }
     }
 }
@@ -54,7 +54,6 @@ impl SampleDescriptionBox {
             match &boks.name {
                 b"avc1" => entries.push(SampleEntry::Avc(avc1::AvcSampleEntryBox::read(reader)?)),
                 b"vp09" => entries.push(SampleEntry::Vp9(vpxx::Vp9SampleEntryBox::read(reader)?)),
-                b"mp4v" => entries.push(SampleEntry::Mpeg4(mp4v::Mpeg4VideoSampleEntryBox::read(reader)?)),
                 _ => {
                     return Err(Mp4BoxError::UnsupportedSampleEntry(BoxPrint(boks.name)));
                 }
@@ -75,7 +74,7 @@ impl SampleDescriptionBox {
             match entry {
                 SampleEntry::Avc(avc1) => avc1.write(writer)?,
                 SampleEntry::Vp9(vp9) => vp9.write(writer)?,
-                SampleEntry::Mpeg4(mp4v) => mp4v.write(writer)?,
+                SampleEntry::Mp4a(mp4a) => mp4a.write(writer)?,
             }
         }
 

@@ -9,11 +9,12 @@ use log::*;
 use std::fmt;
 use std::io::{Error as IoError, SeekFrom, Write};
 use std::string::FromUtf8Error;
+use std::mem::size_of;
 
 pub mod boxes {
     pub mod codec {
-        pub mod stsd;
         pub mod esds;
+        pub mod stsd;
 
         pub mod vpcc;
         pub mod vpxx;
@@ -21,7 +22,9 @@ pub mod boxes {
         pub mod avc1;
         pub mod avcc;
 
+        pub mod mp4a;
         pub mod mp4v;
+        pub mod chnl;
     }
 
     pub mod dinf;
@@ -32,15 +35,21 @@ pub mod boxes {
     pub mod mdhd;
     pub mod mdia;
     pub mod mehd;
+    pub mod mfhd;
     pub mod minf;
+    pub mod moof;
     pub mod moov;
     pub mod mvex;
     pub mod mvhd;
     pub mod smhd;
     pub mod stbl;
+    pub mod tfdt;
+    pub mod tfhd;
     pub mod tkhd;
+    pub mod traf;
     pub mod trak;
     pub mod trex;
+    pub mod trun;
     pub mod url;
     pub mod vmhd;
 
@@ -54,6 +63,8 @@ pub mod boxes {
 
 pub mod demuxer;
 pub mod muxer;
+
+use crate::boxes::codec::chnl::ChannelLayout;
 
 pub struct BoksIterator {
     size: u64,
@@ -110,9 +121,6 @@ pub enum Mp4BoxError {
 
     #[error("Invalid UTF-8: {0}")]
     InvalidUtf8(#[from] FromUtf8Error),
-
-    #[error("Failed parsing MPEG bitstream: {0}")]
-    MpegError(#[from] mpeg1::MpegError),
 
     #[error("Unexpected end of stream")]
     UnexpectedEos,
@@ -508,6 +516,117 @@ impl VisualSampleEntry {
 
     fn size(&self, size: u64) -> u64 {
         self.sample_entry.size(size + 70)
+    }
+}
+
+#[derive(Debug)]
+pub struct AudioSampleEntry {
+    sample_entry: SampleEntry,
+    channel_count: u16,
+    sample_size: u16,
+    sample_rate: u32,
+    channel_layout: ChannelLayout,
+}
+
+impl AudioSampleEntry {
+    pub fn new(
+        name: BoxName,
+        data_reference_index: u16,
+        channel_count: u16,
+        sample_size: u16,
+        sample_rate: u32,
+    ) -> Self {
+        Self {
+            sample_entry: SampleEntry::new(name, data_reference_index),
+            channel_count,
+            sample_size,
+            sample_rate,
+            channel_layout: ChannelLayout::new(),
+        }
+    }
+
+    pub fn read(buf: &mut dyn Buffered) -> Result<Self, Mp4BoxError> {
+        todo!()
+    }
+
+    fn write(&self, writer: &mut dyn Write, size: u64) -> Result<(), Mp4BoxError> {
+        self.sample_entry.write(writer, size)?;
+
+        let mut bytes = [0u8; 20];
+        BigEndian::write_u16(&mut bytes[8..], self.channel_count);
+        BigEndian::write_u16(&mut bytes[10..], self.sample_size);
+        BigEndian::write_u16(&mut bytes[12..], 0);
+        BigEndian::write_u16(&mut bytes[14..], 0);
+        BigEndian::write_u32(&mut bytes[16..], self.sample_rate << 16);
+
+        writer.write_all(&bytes[..])?;
+
+        //self.channel_layout.write(writer)?;
+
+        Ok(())
+    }
+
+    fn size(&self, size: u64) -> u64 {
+        let own_size = size_of::<u32>() as u64 * 2 // reserved
+            + size_of::<u16>() as u64 // channel_count
+            + size_of::<u16>() as u64 // sample_size
+            + size_of::<u16>() as u64 // pre_defined
+            + size_of::<u16>() as u64 // reserved
+            + size_of::<u32>() as u64; // samplerate
+            //+ self.channel_layout.total_size();
+
+        self.sample_entry.size(size + own_size)
+    }
+}
+
+#[derive(Debug)]
+pub struct AudioSampleEntryV1 {
+    sample_entry: SampleEntry,
+    channel_count: u16,
+}
+
+impl AudioSampleEntryV1 {
+    pub fn new(
+        name: BoxName,
+        data_reference_index: u16,
+        channel_count: u16,
+    ) -> Self {
+        Self {
+            sample_entry: SampleEntry::new(name, data_reference_index),
+            channel_count,
+        }
+    }
+
+    pub fn read(buf: &mut dyn Buffered) -> Result<Self, Mp4BoxError> {
+        todo!()
+    }
+
+    fn write(&self, writer: &mut dyn Write, size: u64) -> Result<(), Mp4BoxError> {
+        self.sample_entry.write(writer, size)?;
+
+        let mut bytes = [0u8; 20];
+        BigEndian::write_u16(&mut bytes[..], 1);
+
+        BigEndian::write_u16(&mut bytes[8..], self.channel_count);
+        BigEndian::write_u16(&mut bytes[10..], 16); // sample_size
+        BigEndian::write_u16(&mut bytes[12..], 0); // pre_defined
+        BigEndian::write_u16(&mut bytes[14..], 0); // reserved
+        BigEndian::write_u32(&mut bytes[16..], 1 << 16); // samplerate
+
+        writer.write_all(&bytes[..])?;
+
+        Ok(())
+    }
+
+    fn size(&self, size: u64) -> u64 {
+        let own_size = size_of::<u32>() as u64 * 2 // reserved
+            + size_of::<u16>() as u64 // channel_count
+            + size_of::<u16>() as u64 // sample_size
+            + size_of::<u16>() as u64 // pre_defined
+            + size_of::<u16>() as u64 // reserved
+            + size_of::<u32>() as u64; // samplerate
+
+        self.sample_entry.size(size + own_size)
     }
 }
 

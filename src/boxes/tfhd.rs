@@ -1,9 +1,8 @@
 use byteorder::{BigEndian, WriteBytesExt};
-use four_cc::FourCC;
 
-use bytes::{BufMut, BytesMut};
+use crate::*;
 
-use crate::{FullBoxHeader, Mp4Box, Mp4BoxError};
+use crate::Mp4BoxError;
 
 use std::mem::size_of;
 
@@ -20,6 +19,7 @@ bitflags::bitflags! {
 }
 
 pub struct TrackFragmentHeaderBox {
+    full_box: FullBox,
     pub track_id: u32,
     pub base_data_offset: Option<u64>,
     pub sample_description_index: Option<u32>,
@@ -64,42 +64,36 @@ impl TrackFragmentHeaderBox {
 
         flags
     }
-}
 
-impl Mp4Box for TrackFragmentHeaderBox {
-    const NAME: FourCC = FourCC(*b"tfhd");
+    pub fn new(
+        track_id: u32,
+        base_data_offset: Option<u64>,
+        sample_description_index: Option<u32>,
+        default_sample_duration: Option<u32>,
+        default_sample_size: Option<u32>,
+        default_sample_flags: Option<u32>,
+        duration_is_empty: bool,
+        default_base_is_moof: bool,
+    ) -> Self {
+        let mut tfhd = Self {
+            full_box: FullBox::new(*b"tfhd", 0, 0),
+            track_id,
+            base_data_offset,
+            sample_description_index,
+            default_sample_duration,
+            default_sample_size,
+            default_sample_flags,
+            duration_is_empty,
+            default_base_is_moof,
+        };
 
-    fn get_full_box_header(&self) -> Option<FullBoxHeader> {
-        Some(FullBoxHeader::new(0, self.flags_from_fields().bits()))
+        tfhd.full_box = FullBox::new(*b"tfhd", 0, tfhd.flags_from_fields().bits());
+
+        tfhd
     }
 
-    fn content_size(&self) -> u64 {
-        let mut size = size_of::<u32>() as u64; // track_ID
-
-        if self.base_data_offset.is_some() {
-            size += size_of::<u64>() as u64;
-        }
-
-        if self.sample_description_index.is_some() {
-            size += size_of::<u32>() as u64;
-        }
-
-        if self.default_sample_duration.is_some() {
-            size += size_of::<u32>() as u64;
-        }
-
-        if self.default_sample_size.is_some() {
-            size += size_of::<u32>() as u64;
-        }
-
-        if self.default_sample_flags.is_some() {
-            size += size_of::<u32>() as u64;
-        }
-
-        size
-    }
-
-    fn write_box_contents(&self, writer: &mut BytesMut) -> Result<(), Mp4BoxError> {
+    pub fn write(self, writer: &mut dyn Write) -> Result<(), Mp4BoxError> {
+        self.full_box.write(writer, self.total_size())?;
         let mut v = Vec::new();
 
         v.write_u32::<BigEndian>(self.track_id)?;
@@ -124,8 +118,38 @@ impl Mp4Box for TrackFragmentHeaderBox {
             v.write_u32::<BigEndian>(default_sample_flags)?;
         }
 
-        writer.put_slice(&v);
+        writer.write_all(&v)?;
 
         Ok(())
+    }
+
+    pub fn total_size(&self) -> u64 {
+        self.full_box.size(self.size())
+    }
+
+    fn size(&self) -> u64 {
+        let mut size = size_of::<u32>() as u64; // track_ID
+
+        if self.base_data_offset.is_some() {
+            size += size_of::<u64>() as u64;
+        }
+
+        if self.sample_description_index.is_some() {
+            size += size_of::<u32>() as u64;
+        }
+
+        if self.default_sample_duration.is_some() {
+            size += size_of::<u32>() as u64;
+        }
+
+        if self.default_sample_size.is_some() {
+            size += size_of::<u32>() as u64;
+        }
+
+        if self.default_sample_flags.is_some() {
+            size += size_of::<u32>() as u64;
+        }
+
+        size
     }
 }

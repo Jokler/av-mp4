@@ -1,33 +1,38 @@
 use byteorder::{BigEndian, ByteOrder};
-use four_cc::FourCC;
 
-use bytes::{BufMut, BytesMut};
+use crate::*;
 
-use crate::{FullBoxHeader, Mp4Box, Mp4BoxError};
+use crate::Mp4BoxError;
 
 use std::mem::size_of;
 
 pub struct TrackFragmentBaseMediaDecodeTimeBox {
+    full_box: FullBox,
     pub base_media_decode_time: u64,
 }
 
-impl Mp4Box for TrackFragmentBaseMediaDecodeTimeBox {
-    const NAME: FourCC = FourCC(*b"tfdt");
+impl TrackFragmentBaseMediaDecodeTimeBox {
+    const SIZE: u64 = size_of::<u64>() as u64; // base_media_decode_time
 
-    fn get_full_box_header(&self) -> Option<FullBoxHeader> {
-        Some(FullBoxHeader::new(1, 0))
+    pub fn new(base_media_decode_time: u64) -> Self {
+        Self {
+            full_box: FullBox::new(*b"tfdt", 1, 0),
+            base_media_decode_time,
+        }
     }
 
-    fn content_size(&self) -> u64 {
-        size_of::<u64>() as u64 // base_media_decode_time
-    }
+    pub fn write(self, writer: &mut dyn Write) -> Result<(), Mp4BoxError> {
+        self.full_box.write(writer, self.total_size())?;
 
-    fn write_box_contents(&self, writer: &mut BytesMut) -> Result<(), Mp4BoxError> {
-        let mut content = [0u8; 8];
-        BigEndian::write_u64(&mut content[..], self.base_media_decode_time);
+        let mut contents = [0u8; Self::SIZE as usize];
+        BigEndian::write_u64(&mut contents, self.base_media_decode_time);
 
-        writer.put_slice(&content);
+        writer.write_all(&contents)?;
 
         Ok(())
+    }
+
+    pub fn total_size(&self) -> u64 {
+        self.full_box.size(Self::SIZE)
     }
 }

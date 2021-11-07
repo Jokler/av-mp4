@@ -1,11 +1,10 @@
 use byteorder::{BigEndian, WriteBytesExt};
-use four_cc::FourCC;
 
-use bytes::{BufMut, BytesMut};
+use crate::*;
 
 use std::mem::size_of;
 
-use crate::{FullBoxHeader, Mp4Box, Mp4BoxError};
+use crate::Mp4BoxError;
 
 bitflags::bitflags! {
     pub struct TrackFragmentRunFlags: u32 {
@@ -26,6 +25,7 @@ pub struct TrackFragmentSample {
 }
 
 pub struct TrackFragmentRunBox {
+    full_box: FullBox,
     pub data_offset: Option<i32>,
     pub first_sample_flags: Option<u32>,
     pub samples: Vec<TrackFragmentSample>,
@@ -85,36 +85,26 @@ impl TrackFragmentRunBox {
 
         flags
     }
-}
 
-impl Mp4Box for TrackFragmentRunBox {
-    const NAME: FourCC = FourCC(*b"trun");
+    pub fn new(
+        data_offset: Option<i32>,
+        first_sample_flags: Option<u32>,
+        samples: Vec<TrackFragmentSample>,
+    ) -> Self {
+        let mut trun = Self {
+            full_box: FullBox::new(*b"trun", 0, 0),
+            data_offset,
+            first_sample_flags,
+            samples,
+        };
 
-    fn get_full_box_header(&self) -> Option<FullBoxHeader> {
-        Some(FullBoxHeader::new(0, self.flags_from_fields().bits()))
+        trun.full_box = FullBox::new(*b"trun", 0, trun.flags_from_fields().bits());
+
+        trun
     }
 
-    fn content_size(&self) -> u64 {
-        let flags = self.flags_from_fields();
-
-        let mut size = 0;
-
-        size += size_of::<u32>() as u64; // sample_count
-
-        if flags.contains(TrackFragmentRunFlags::DATA_OFFSET_PRESENT) {
-            size += size_of::<i32>() as u64; // data_offset
-        }
-
-        if flags.contains(TrackFragmentRunFlags::FIRST_SAMPLE_FLAGS_PRESENT) {
-            size += size_of::<u32>() as u64; // first_sample_flags
-        }
-
-        size += self.sample_size(flags) * self.samples.len() as u64;
-
-        size
-    }
-
-    fn write_box_contents(&self, writer: &mut BytesMut) -> Result<(), Mp4BoxError> {
+    pub fn write(self, writer: &mut dyn Write) -> Result<(), Mp4BoxError> {
+        self.full_box.write(writer, self.total_size())?;
         let mut v = Vec::new();
 
         v.write_u32::<BigEndian>(self.samples.len() as u32)?; // TODO: check for truncation
@@ -148,11 +138,35 @@ impl Mp4Box for TrackFragmentRunBox {
             }
         }
 
-        assert_eq!(v.len() as u64, self.content_size());
+        assert_eq!(v.len() as u64, self.size());
 
-        writer.put_slice(&v);
+        writer.write_all(&v)?;
 
         Ok(())
+    }
+
+    pub fn total_size(&self) -> u64 {
+        self.full_box.size(self.size())
+    }
+
+    fn size(&self) -> u64 {
+        let flags = self.flags_from_fields();
+
+        let mut size = 0;
+
+        size += size_of::<u32>() as u64; // sample_count
+
+        if flags.contains(TrackFragmentRunFlags::DATA_OFFSET_PRESENT) {
+            size += size_of::<i32>() as u64; // data_offset
+        }
+
+        if flags.contains(TrackFragmentRunFlags::FIRST_SAMPLE_FLAGS_PRESENT) {
+            size += size_of::<u32>() as u64; // first_sample_flags
+        }
+
+        size += self.sample_size(flags) * self.samples.len() as u64;
+
+        size
     }
 }
 

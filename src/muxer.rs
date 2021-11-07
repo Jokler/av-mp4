@@ -13,8 +13,8 @@ use av_format::{
 
 use byteorder::{BigEndian, WriteBytesExt};
 
-use crate::boxes::*;
 use crate::boxes::codec::*;
+use crate::boxes::*;
 use crate::{AvError, Boks};
 
 use log::*;
@@ -209,7 +209,7 @@ impl TrackChunkBuilder {
             ),
             mdia::MediaBox::new(
                 mdhd::MediaHeaderBox::new(timebase, 0),
-                hdlr::HandlerBox::new(0x76696465, String::from("Video Handler")),
+                hdlr::HandlerBox::new(*b"vide", String::from("Video Handler")),
                 minf::MediaInformationBox::new(
                     minf::MediaHeader::Video(vmhd::VideoMediaHeaderBox::new()),
                     dinf::DataInformationBox::new(dref::DataReferenceBox::new(vec![

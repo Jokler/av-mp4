@@ -18,8 +18,8 @@ use av_format::error::Result as AvResult;
 
 use log::*;
 
-use crate::boxes::*;
 use crate::boxes::codec::*;
+use crate::boxes::*;
 use crate::{skip, Boks, Mp4BoxError};
 
 use stbl::ChunkOffsets;
@@ -32,20 +32,15 @@ struct VpxCodecData {
     extradata: Vec<u8>,
 }
 
-fn get_mp4v_codec_id(boks: &mp4v::Mpeg4VideoSampleEntryBox) -> Result<&'static str, Mp4BoxError> {
-    let ty = boks.esds.descriptor.decoder_description.object_type_indication;
-    match ty {
-        0x6a => Ok("mpeg1video"),
-        _ => Err(Mp4BoxError::UnsupportedMpeg4Codec(ty)),
-    }
-}
-
 fn read_sample(buf: &mut dyn Buffered, sample: SampleRef) -> Result<Sample, Mp4BoxError> {
     buf.seek(SeekFrom::Start(sample.data_offset))?;
 
     let len = sample.data_length as usize + 0;
     let padded_len = ((len + 8 + 7) / 8) * 8;
-    println!("offset={} len={}, padded={}", sample.data_offset, sample.data_length, padded_len);
+    println!(
+        "offset={} len={}, padded={}",
+        sample.data_offset, sample.data_length, padded_len
+    );
     let mut data = vec![0u8; padded_len];
     buf.read_exact(&mut data[..len])?;
 
@@ -146,15 +141,8 @@ impl stsd::SampleEntry {
                     delay: 0,
                 })
             }
-            stsd::SampleEntry::Mpeg4(mp4v) => {
-                Ok(CodecParams {
-                    kind: None,
-                    codec_id: Some(get_mp4v_codec_id(mp4v)?.into()),
-                    extradata: None,
-                    bit_rate: 0,
-                    convergence_window: 0,
-                    delay: 0,
-                })
+            stsd::SampleEntry::Mp4a(_entry) => {
+                todo!()
             }
         }
     }
@@ -260,11 +248,11 @@ impl Track {
 
         let stream = Stream {
             id: id as isize,
-            index: index,
+            index,
             params: sample_entry.as_codec_params()?,
             start: None,
             duration: Some(duration),
-            timebase: timebase,
+            timebase,
             user_private: None,
         };
 
@@ -386,20 +374,6 @@ impl Mp4Demuxer {
         Ok(buf.seek(SeekFrom::Current(0))?)
     }
 
-    fn parse_streams(&mut self, buf: &mut dyn Buffered) -> Result<(), Mp4BoxError> {
-        self.read_until_moov(buf)?;
-
-        for t in &mut self.tracks {
-            if t.stream.params.kind.is_none() {
-                let sample = read_sample(buf, t.current_sample().unwrap())?;
-
-                mpeg1::fill_codec_params(&sample.data, &mut t.stream.params)?;
-            }
-        }
-
-        Ok(())
-    }
-
     fn read_until_moov(&mut self, buf: &mut dyn Buffered) -> Result<(), Mp4BoxError> {
         // go through boxes until we find moov
         loop {
@@ -436,7 +410,6 @@ impl Mp4Demuxer {
             }
         }
     }
-
 
     fn read_next_event(&mut self, buf: &mut dyn Buffered) -> AvResult<Event> {
         let earliest_track_sample = self
@@ -479,15 +452,9 @@ impl Mp4Demuxer {
 impl Demuxer for Mp4Demuxer {
     fn read_headers(
         &mut self,
-        buf: &mut dyn Buffered,
+        _buf: &mut dyn Buffered,
         info: &mut GlobalInfo,
     ) -> AvResult<SeekFrom> {
-        let res = self.parse_streams(buf);
-
-        if let Err(e) = res {
-            error!("{}", e);
-        }
-
         info.streams = self.tracks.iter().map(|t| t.stream.clone()).collect();
 
         Ok(SeekFrom::Current(0))

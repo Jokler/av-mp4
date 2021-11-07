@@ -1,45 +1,62 @@
-use four_cc::FourCC;
+use crate::*;
 
-use bytes::BytesMut;
-
-use crate::{Mp4Box, Mp4BoxError};
-
-use super::{TrackFragmentBaseMediaDecodeTimeBox, TrackFragmentHeaderBox, TrackFragmentRunBox};
+use super::{
+    tfdt::TrackFragmentBaseMediaDecodeTimeBox, tfhd::TrackFragmentHeaderBox,
+    trun::TrackFragmentRunBox,
+};
 
 pub struct TrackFragmentBox {
+    boks: Boks,
     pub tfhd: TrackFragmentHeaderBox,
     pub track_runs: Vec<TrackFragmentRunBox>,
     pub base_media_decode_time: Option<TrackFragmentBaseMediaDecodeTimeBox>,
 }
 
-impl Mp4Box for TrackFragmentBox {
-    const NAME: FourCC = FourCC(*b"traf");
-
-    fn content_size(&self) -> u64 {
-        let mut size = self.tfhd.size();
-
-        for trun in &self.track_runs {
-            size += trun.size();
+impl TrackFragmentBox {
+    pub fn new(
+        tfhd: TrackFragmentHeaderBox,
+        track_runs: Vec<TrackFragmentRunBox>,
+        base_media_decode_time: Option<TrackFragmentBaseMediaDecodeTimeBox>,
+    ) -> Self {
+        Self {
+            boks: Boks::new(*b"traf"),
+            tfhd,
+            track_runs,
+            base_media_decode_time,
         }
-
-        if let Some(base_media_decode_time) = &self.base_media_decode_time {
-            size += base_media_decode_time.size();
-        }
-
-        size
     }
 
-    fn write_box_contents(&self, writer: &mut BytesMut) -> Result<(), Mp4BoxError> {
+    pub fn write(self, writer: &mut dyn Write) -> Result<(), Mp4BoxError> {
+        self.boks.write(writer, self.total_size())?;
+
         self.tfhd.write(writer)?;
 
-        if let Some(base_media_decode_time) = &self.base_media_decode_time {
+        if let Some(base_media_decode_time) = self.base_media_decode_time {
             base_media_decode_time.write(writer)?;
         }
 
-        for run in &self.track_runs {
+        for run in self.track_runs {
             run.write(writer)?;
         }
 
         Ok(())
+    }
+
+    pub fn total_size(&self) -> u64 {
+        self.boks.size(self.size())
+    }
+
+    fn size(&self) -> u64 {
+        let mut size = self.tfhd.total_size();
+
+        for trun in &self.track_runs {
+            size += trun.total_size();
+        }
+
+        if let Some(base_media_decode_time) = &self.base_media_decode_time {
+            size += base_media_decode_time.total_size();
+        }
+
+        size
     }
 }
